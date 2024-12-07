@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8"/>
+    <title>Chat with AI - Character Chat</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+
+        .container {
+            display: flex;
+            gap: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .character-list {
+            width: 300px;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            height: calc(100vh - 40px);
+            overflow-y: auto;
+        }
+
+        .character-card {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .character-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .character-card h3 {
+            margin: 0 0 10px 0;
+            color: #2196F3;
+        }
+
+        .character-card p {
+            margin: 5px 0;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 40px);
+        }
+
+        #chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            background: white;
+        }
+
+        .message {
+            margin-bottom: 10px;
+            padding: 12px;
+            border-radius: 8px;
+            max-width: 80%;
+        }
+
+        .user-message {
+            background-color: #e3f2fd;
+            margin-left: auto;
+        }
+
+        .ai-message {
+            background-color: #f5f5f5;
+            margin-right: auto;
+        }
+
+        .error {
+            color: #dc3545;
+            font-style: italic;
+            text-align: center;
+        }
+
+        .username {
+            font-weight: bold;
+            margin-bottom: 6px;
+        }
+
+        .username.ai {
+            color: #2196F3;
+        }
+
+        .content {
+            white-space: pre-wrap;
+            line-height: 1.4;
+        }
+
+        .input-container {
+            display: flex;
+            gap: 10px;
+        }
+
+        #chat-message-input {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        #chat-message-submit {
+            padding: 12px 24px;
+            background: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        #chat-message-submit:hover {
+            background: #1976D2;
+        }
+
+        #chat-message-submit:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .category-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            background: #e9ecef;
+            border-radius: 4px;
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .chat-count {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Character List -->
+        <div class="character-list">
+            <h2>Characters</h2>
+            <div id="characters-container">
+                <!-- Characters will be loaded here -->
+            </div>
+        </div>
+
+        <!-- Chat Area -->
+        <div class="chat-container">
+            <div id="chat-messages"></div>
+            <div class="input-container">
+                <input id="chat-message-input" type="text" placeholder="Type your message...">
+                <button id="chat-message-submit">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Fetch characters
+        async function loadCharacters() {
+            try {
+                const response = await fetch('/api/v1/characters/');
+                const data = await response.json();
+                const container = document.getElementById('characters-container');
+                
+                data.results.forEach(character => {
+                    const card = document.createElement('div');
+                    card.className = 'character-card';
+                    card.innerHTML = `
+                        <h3>${character.name}</h3>
+                        <p>${character.description}</p>
+                        <div class="category-badge">${character.category}</div>
+                        <div class="chat-count">Chats: ${character.chat_count}</div>
+                    `;
+                    
+                    card.onclick = () => startChat(character.id);
+                    container.appendChild(card);
+                });
+            } catch (error) {
+                console.error('Error loading characters:', error);
+            }
+        }
+
+        // Start chat with selected character
+        async function startChat(characterId) {
+            try {
+                const response = await fetch(`/api/v1/chat/new/${characterId}/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    window.location.href = `/api/v1/chat/${data.room_id}/`;
+                }
+            } catch (error) {
+                console.error('Error starting chat:', error);
+            }
+        }
+
+        // Get CSRF token
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        // WebSocket connection code
+        const roomId = '{{ room_id }}';
+        const wsScheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const chatSocket = new WebSocket(
+            `${wsScheme}//${window.location.host}/ws/chat?room=${roomId}`
+        );
+
+        chatSocket.onmessage = function(e) {
+            const data = JSON.parse(e.data);
+            const messages = document.querySelector('#chat-messages');
+            
+            if (data.error) {
+                messages.innerHTML += `
+                    <div class="message error">
+                        Error: ${data.error}
+                    </div>
+                `;
+            } else {
+                const messageClass = data.is_ai ? 'ai-message' : 'user-message';
+                const usernameClass = data.is_ai ? 'username ai' : 'username';
+                
+                messages.innerHTML += `
+                    <div class="message ${messageClass}">
+                        <div class="${usernameClass}">${data.username}</div>
+                        <div class="content">${data.message}</div>
+                    </div>
+                `;
+            }
+            messages.scrollTop = messages.scrollHeight;
+        };
+
+        chatSocket.onclose = function(e) {
+            console.log('Chat socket closed unexpectedly');
+        };
+
+        const messageInput = document.querySelector('#chat-message-input');
+        const submitButton = document.querySelector('#chat-message-submit');
+
+        messageInput.focus();
+        messageInput.onkeyup = function(e) {
+            if (e.keyCode === 13 && !e.shiftKey) {
+                submitButton.click();
+            }
+        };
+
+        submitButton.onclick = function(e) {
+            const message = messageInput.value.trim();
+            if (message) {
+                messageInput.disabled = true;
+                submitButton.disabled = true;
+                
+                chatSocket.send(JSON.stringify({
+                    'message': message
+                }));
+                
+                messageInput.value = '';
+                
+                setTimeout(() => {
+                    messageInput.disabled = false;
+                    submitButton.disabled = false;
+                    messageInput.focus();
+                }, 1000);
+            }
+        };
+
+        // Load characters when page loads
+        document.addEventListener('DOMContentLoaded', loadCharacters);
+    </script>
+</body>
+</html>

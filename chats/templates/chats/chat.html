@@ -1,0 +1,184 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8"/>
+    <title>AI Character Chat</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Character Selection -->
+        <div class="mb-8">
+            <h2 class="text-2xl font-bold mb-4">Choose a Character</h2>
+            <div id="characters" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- Characters will be loaded here -->
+            </div>
+        </div>
+
+        <!-- Chat Interface (Hidden initially) -->
+        <div id="chat-interface" class="hidden">
+            <div class="bg-white rounded-lg shadow-lg">
+                <!-- Chat Header -->
+                <div class="p-4 border-b">
+                    <h3 id="character-name" class="text-xl font-bold"></h3>
+                </div>
+
+                <!-- Messages Area -->
+                <div id="messages" class="h-96 overflow-y-auto p-4"></div>
+
+                <!-- Input Area -->
+                <div class="p-4 border-t">
+                    <div class="flex gap-2">
+                        <input type="text" 
+                               id="message-input"
+                               class="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                               placeholder="Type your message...">
+                        <button id="send-button"
+                                class="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            Send
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentRoom = null;
+        let chatSocket = null;
+
+        // Load characters
+        async function loadCharacters() {
+            try {
+                const response = await fetch('/api/v1/characters/');
+                const data = await response.json();
+                const container = document.getElementById('characters');
+                
+                data.results.forEach(character => {
+                    const card = createCharacterCard(character);
+                    container.appendChild(card);
+                });
+            } catch (error) {
+                console.error('Error loading characters:', error);
+            }
+        }
+
+        function createCharacterCard(character) {
+            const div = document.createElement('div');
+            div.className = 'bg-white p-4 rounded-lg shadow hover:shadow-lg transition-shadow';
+            div.innerHTML = `
+                <img src="${character.avatar || '/static/default-avatar.png'}" 
+                     class="w-full h-48 object-cover rounded-lg mb-4">
+                <h3 class="text-lg font-bold mb-2">${character.name}</h3>
+                <p class="text-gray-600 mb-2">${character.description}</p>
+                <span class="inline-block bg-gray-200 rounded-full px-3 py-1 text-sm font-semibold text-gray-700">
+                    ${character.category}
+                </span>
+            `;
+            
+            div.onclick = () => startChat(character.id);
+            return div;
+        }
+
+        async function startChat(characterId) {
+          try {
+              const response = await fetch('/api/v1/chats/', {
+                  method: 'POST',
+                  headers: {
+                      'Content-Type': 'application/json',
+                      'X-CSRFToken': getCookie('csrftoken')
+                  },
+                  body: JSON.stringify({ character_id: characterId })
+              });
+              
+              if (response.ok) {
+                  const data = await response.json();
+                  showChatInterface(data);
+                  connectWebSocket(data.websocket_url);
+              }
+          } catch (error) {
+              console.error('Error starting chat:', error);
+          }
+     }
+
+        function showChatInterface(roomData) {
+            document.getElementById('characters').classList.add('hidden');
+            document.getElementById('chat-interface').classList.remove('hidden');
+            document.getElementById('character-name').textContent = roomData.character.name;
+            currentRoom = roomData;
+        }
+
+        function connectWebSocket(url) {
+            if (chatSocket) {
+                chatSocket.close();
+            }
+
+            chatSocket = new WebSocket(url);
+            
+            chatSocket.onmessage = function(e) {
+                const data = JSON.parse(e.data);
+                appendMessage(data);
+            };
+
+            chatSocket.onclose = function(e) {
+                console.log('Chat socket closed unexpectedly');
+            };
+        }
+
+        function appendMessage(data) {
+            const messages = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `mb-4 ${data.is_ai ? 'pl-4' : 'pl-8'}`;
+            
+            messageDiv.innerHTML = `
+                <div class="${data.is_ai ? 'bg-gray-100' : 'bg-blue-100'} rounded-lg p-3 inline-block">
+                    <p class="font-semibold text-sm mb-1">${data.username}</p>
+                    <p>${data.message}</p>
+                </div>
+            `;
+            
+            messages.appendChild(messageDiv);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        // Event Listeners
+        document.getElementById('send-button').onclick = sendMessage;
+        document.getElementById('message-input').onkeypress = function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        };
+
+        function sendMessage() {
+            const input = document.getElementById('message-input');
+            const message = input.value.trim();
+            
+            if (message && chatSocket) {
+                chatSocket.send(JSON.stringify({
+                    'message': message
+                }));
+                input.value = '';
+            }
+        }
+
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        // Load characters when page loads
+        document.addEventListener('DOMContentLoaded', loadCharacters);
+    </script>
+</body>
+</html>
